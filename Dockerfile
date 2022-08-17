@@ -4,7 +4,7 @@
 FROM composer:latest as composer-build
 WORKDIR /build
 
-COPY /composer.json /composer.lock ./
+COPY /composer.json ./
 RUN composer install --ignore-platform-reqs --prefer-dist --no-scripts --no-progress --no-interaction --no-dev --no-autoloader
 RUN composer dump-autoload --optimize --apcu --no-dev
 
