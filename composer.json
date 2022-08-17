@@ -1,0 +1,21 @@
+{
+    "name": "azureflow/auto-dmv",
+    "type": "project",
+    "require": {
+		"php": "^8.1",
+		"ext-dom": "*",
+        "guzzlehttp/guzzle": "^7.4"
+	},
+    "license": "MIT",
+    "autoload": {
+        "psr-4": {
+            "Azureflow\\AutoDmv\\": "src/"
+        }
+    },
+    "authors": [
+        {
+            "name": "Kevin",
+            "email": "AzureFlow@protonmail.com"
+        }
+    ]
+}

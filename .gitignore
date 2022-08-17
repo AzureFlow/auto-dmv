@@ -1,0 +1,13 @@
+/vendor
+/src/config.php
+
+# Editors
+/.vscode
+/.idea
+/*.iml
+
+# Junk
+*.lnk
+desktop.ini
+.DS_Store
+Thumbs.db
