@@ -17,3 +17,9 @@ Run:
 ```bash
 docker run --rm --name dmv -d azureflow/auto-dmv
 ```
+
+Run:
+
+```bash
+docker logs dmv -f
+```
