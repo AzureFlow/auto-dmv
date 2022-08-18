@@ -7,6 +7,8 @@ require __DIR__ . '/../vendor/autoload.php';
 require __DIR__ . '/config.php';
 
 
+$cooldown = [];
+
 $client = new Client([
 	'base_uri' => PAGE_URL,
 	RequestOptions::HEADERS => [
@@ -37,20 +39,83 @@ while(true)
 	]);
 
 	$step3Content = xpathFromContent($step3Resp->getBody()->getContents());
-	$locations = $step3Content->query('//div[@class="center-textDiv"]/text()');
+	$step3Form = getForm($step3Content);
+	$locations = $step3Content->query('//div[@class="center-textDiv"]');
 
 	/** @var DOMElement $location */
 	foreach($locations as $location)
 	{
-		$locationName = trim($location->textContent);
+		$locationName = trim($step3Content->query($location->getNodePath() . '/text()')->item(0)->textContent);
+		$id = $location->parentNode->getAttribute('data-id');
 		// echo $locationName . PHP_EOL;
 
 		if(in_array(strtolower($locationName), WATCH_LOCATIONS))
 		{
-			$message = 'Found new appointment at ' . ucwords($locationName);
-			echo $message . PHP_EOL;
-			notify($message, 'New Appointment', PAGE_URL);
-			exit(0);
+			if(!isset($cooldown[$locationName]) || $cooldown[$locationName] + ALERT_COOLDOWN_SECONDS <= time())
+			{
+				$step3Form['StepControls[1].Model.Value'] = $id;
+				$step4Resp = $client->post('', [
+					RequestOptions::FORM_PARAMS => $step3Form,
+				]);
+				$step4Content = xpathFromContent($step4Resp->getBody()->getContents());
+				$step4Form = getForm($step4Content);
+
+				$dateScript = $step4Content->query('//script[contains(text(), "minDate")]/text()')->item(0)->textContent;
+
+				$minDateRaw = extractText($dateScript, 'minDate');
+				$minDate = $date = DateTime::createFromFormat('Y-m-d', $minDateRaw, new DateTimeZone('America/Chicago'));
+				$minDate->add(new DateInterval('P1D'));
+
+				$maxDateRaw = extractText($dateScript, 'maxDate');
+				$maxDate = $date = DateTime::createFromFormat('Y-m-d', $maxDateRaw, new DateTimeZone('America/Chicago'));
+				$maxDate2 = clone $maxDate;
+				$maxDate->sub(new DateInterval('P1D'));
+
+				// echo $minDate->format('Y-m-d') . ' - ' . $maxDate->format('Y-m-d') . PHP_EOL;
+
+				$period = new DatePeriod($minDate, new DateInterval('P1D'), $maxDate2);
+
+				$timeText = '';
+				/** @var DateTime $value */
+				foreach($period as $value)
+				{
+					echo 'Checking times for ' . $value->format('M j') . PHP_EOL;
+					$step4Form['StepControls[2].Model.Value'] = $value->format('Y-m-d');
+
+					$timesResp = $client->post(
+						'https://ilsosappt.cxmflow.com/Appointment/AmendStep?stepControlTriggerId=23f8fdc6-da6d-415a-bd5d-b88918c79b83&targetStepControlId=e86a060e-e040-46f1-9afe-92ff9d6cbd17',
+						[
+							RequestOptions::FORM_PARAMS => $step4Form,
+						]
+					);
+					$timesContent = xpathFromContent($timesResp->getBody()->getContents());
+					$times = $timesContent->query('//select[@id="35d81233-3067-43e2-a1bf-632a0a239a5a"]/option[position()>1]/@data-datetime');
+					$timesDt = [];
+
+					/** @var DOMElement $time */
+					foreach($times as $time)
+					{
+						$temp = DateTime::createFromFormat('n/j/Y g:i:s A', $time->textContent, new DateTimeZone('America/Chicago'));
+						$timesDt[] = $temp;
+
+						// echo $time->textContent . ' = ' . PHP_EOL;
+						// var_dump($temp);
+					}
+
+					if(!empty($timesDt))
+					{
+						$timeDtText = array_map(static function(DateTime $value) {
+							return "\t{$value->format('g:i A')}";
+						}, $timesDt);
+						$timeText .= "{$value->format('M j')}:\n" . implode("\n", $timeDtText) . "\n\n";
+					}
+				}
+
+				$message = 'Found new appointment at ' . ucwords($locationName) . "!\n\nTimes:\n$timeText";
+				echo $message . PHP_EOL;
+				notify($message, 'New Appointment', PAGE_URL);
+				$cooldown[$locationName] = time();
+			}
 		}
 	}
 
@@ -126,4 +191,15 @@ function notify(string $message, string $title = '', string $url = '', int $prio
 	]);
 
 	return $resp->getStatusCode() === 200;
+}
+
+/**
+ * @param string $haystack
+ * @param string $thing
+ * @return string
+ */
+function extractText(string $haystack, string $thing): string
+{
+	$text = explode('\',', explode($thing, $haystack)[1])[0];
+	return substr($text, strpos($text, '\'') + 1);
 }
