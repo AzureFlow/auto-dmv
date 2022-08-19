@@ -20,7 +20,7 @@ $client = new Client([
 	RequestOptions::COOKIES => true,
 ]);
 
-echo 'Watching the following locations: ' . implode(array_map('ucwords', WATCH_LOCATIONS)) . PHP_EOL . PHP_EOL;
+logMsg('Watching the following locations: ' . implode(array_map('ucwords', WATCH_LOCATIONS)) . PHP_EOL);
 while(true)
 {
 	$step1Resp = $client->get('');
@@ -47,7 +47,6 @@ while(true)
 	{
 		$locationName = trim($step3Content->query($location->getNodePath() . '/text()')->item(0)->textContent);
 		$id = $location->parentNode->getAttribute('data-id');
-		// echo $locationName . PHP_EOL;
 
 		if(in_array(strtolower($locationName), WATCH_LOCATIONS))
 		{
@@ -71,7 +70,7 @@ while(true)
 				$maxDate2 = clone $maxDate;
 				$maxDate->sub(new DateInterval('P1D'));
 
-				// echo $minDate->format('Y-m-d') . ' - ' . $maxDate->format('Y-m-d') . PHP_EOL;
+				// logMsg('Found dates: ' . $minDate->format('Y-m-d') . ' - ' . $maxDate->format('Y-m-d'));
 
 				$period = new DatePeriod($minDate, new DateInterval('P1D'), $maxDate2);
 
@@ -79,7 +78,7 @@ while(true)
 				/** @var DateTime $value */
 				foreach($period as $value)
 				{
-					echo 'Checking times for ' . $value->format('M j') . PHP_EOL;
+					logMsg('Checking times for ' . $value->format('M j'));
 					$step4Form['StepControls[2].Model.Value'] = $value->format('Y-m-d');
 
 					$timesResp = $client->post(
@@ -97,9 +96,6 @@ while(true)
 					{
 						$temp = DateTime::createFromFormat('n/j/Y g:i:s A', $time->textContent, new DateTimeZone('America/Chicago'));
 						$timesDt[] = $temp;
-
-						// echo $time->textContent . ' = ' . PHP_EOL;
-						// var_dump($temp);
 					}
 
 					if(!empty($timesDt))
@@ -112,14 +108,14 @@ while(true)
 				}
 
 				$message = 'Found new appointment at ' . ucwords($locationName) . "!\n\nTimes:\n$timeText";
-				echo $message . PHP_EOL;
+				logMsg($message);
 				notify($message, 'New Appointment', PAGE_URL);
 				$cooldown[$locationName] = time();
 			}
 		}
 	}
 
-	echo 'Waiting...' . PHP_EOL;
+	logMsg('Waiting...');
 	sleep(WAIT_TIME);
 }
 
@@ -202,4 +198,14 @@ function extractText(string $haystack, string $thing): string
 {
 	$text = explode('\',', explode($thing, $haystack)[1])[0];
 	return substr($text, strpos($text, '\'') + 1);
+}
+
+/**
+ * @param string $message
+ * @return void
+ */
+function logMsg(string $message): void
+{
+	$ts = (new DateTime())->format(DateTimeInterface::ATOM);
+	echo "[$ts] $message" . PHP_EOL;
 }
